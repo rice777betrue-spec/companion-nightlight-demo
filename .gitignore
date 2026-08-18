@@ -1,0 +1,15 @@
+.venv/
+.cache/
+outputs/
+logs/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.log
+*.wav
+.env
+
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
