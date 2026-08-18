@@ -56,6 +56,16 @@ class VoiceprintEnrollment:
 
 
 @dataclass(frozen=True)
+class WakeWordDecision:
+    """一次唤醒门控判定。action 为 ignore、acknowledge 或 process。"""
+
+    action: str
+    transcript: str
+    triggered: bool
+    status: str
+
+
+@dataclass(frozen=True)
 class TurnRequest:
     """一次语音交互的统一输入，与 Gradio 或设备界面无关。"""
 
@@ -64,6 +74,7 @@ class TurnRequest:
     user_name: str = ""
     preferences: str = ""
     brightness: int | float = 35
+    require_wake_word: bool = False
 
 
 @dataclass(frozen=True)
@@ -94,3 +105,5 @@ class TurnResult:
     used_companion_model: bool
     light_execution: LightExecution
     speaker_verification: SpeakerVerification | None = None
+    response_required: bool = True
+    wake_word_status: str = ""

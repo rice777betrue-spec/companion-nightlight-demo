@@ -40,6 +40,18 @@ class SpeechRecognizerTests(unittest.TestCase):
         self.assertIn("关灯", fake_model.options["hotwords"])
         self.assertFalse(fake_model.options["condition_on_previous_text"])
 
+    def test_custom_wake_word_is_passed_to_whisper_immediately(self) -> None:
+        recognizer = SpeechRecognizer("base")
+        fake_model = _FakeWhisperModel()
+        recognizer._model = fake_model
+        recognizer.set_wake_word("暖暖")
+
+        recognizer.transcribe("sample.wav")
+
+        self.assertIn("暖暖", fake_model.options["initial_prompt"])
+        self.assertIn("暖暖", fake_model.options["hotwords"])
+        self.assertNotIn("小夜灯", fake_model.options["hotwords"])
+
     def test_empty_transcript_is_a_normal_no_speech_signal(self) -> None:
         recognizer = SpeechRecognizer("base")
         recognizer._model = _EmptyWhisperModel()

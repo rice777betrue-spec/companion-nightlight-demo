@@ -20,6 +20,7 @@ from companion_demo.ports.services import (
     LightDriverPort,
     SpeakerVerificationPort,
     SpeechRecognitionPort,
+    WakeWordGatePort,
 )
 
 
@@ -32,11 +33,27 @@ class TurnEngine:
         companion: CompanionModelPort,
         light_driver: LightDriverPort,
         speaker_verifier: SpeakerVerificationPort | None = None,
+        wake_word_gate: WakeWordGatePort | None = None,
     ) -> None:
         self.asr = asr
         self.companion = companion
         self.light_driver = light_driver
         self.speaker_verifier = speaker_verifier
+        self.wake_word_gate = wake_word_gate
+
+    @staticmethod
+    def _unchanged_light(
+        brightness: int | float,
+        description: str,
+    ) -> LightExecution:
+        level = max(0, min(100, int(round(brightness))))
+        return LightExecution(
+            previous=level,
+            requested=level,
+            actual=level,
+            applied=False,
+            description=description,
+        )
 
     def _verify_speaker(self, audio_path: str) -> SpeakerVerification:
         if self.speaker_verifier is None:
@@ -100,14 +117,60 @@ class TurnEngine:
             raise ValueError("请先录一段话。")
 
         safe_history = list(request.history or [])
+        asr_started = time.perf_counter()
+        transcript = self.asr.transcribe(request.audio_path)
+        asr_seconds = time.perf_counter() - asr_started
+        wake_word_status = ""
+
+        if request.require_wake_word and self.wake_word_gate is not None:
+            decision = self.wake_word_gate.evaluate(transcript)
+            wake_word_status = decision.status
+            unchanged = self._unchanged_light(
+                request.brightness,
+                f"灯光保持在 {int(round(request.brightness))}%",
+            )
+            if decision.action == "ignore":
+                return TurnResult(
+                    transcript=transcript,
+                    reply="",
+                    history=safe_history,
+                    status=f"ASR {asr_seconds:.2f} 秒｜{decision.status}",
+                    brightness=unchanged.actual,
+                    light_status=unchanged.description,
+                    dialogue_mode="等待唤醒",
+                    asr_seconds=asr_seconds,
+                    generation_seconds=0.0,
+                    used_companion_model=False,
+                    light_execution=unchanged,
+                    response_required=False,
+                    wake_word_status=decision.status,
+                )
+            if decision.action == "acknowledge":
+                return TurnResult(
+                    transcript=transcript,
+                    reply="我在，你说吧。",
+                    history=safe_history,
+                    status=(
+                        f"文字已生成｜ASR {asr_seconds:.2f} 秒"
+                        f"｜唤醒即时确认｜{decision.status}｜正在生成语音…"
+                    ),
+                    brightness=unchanged.actual,
+                    light_status=unchanged.description,
+                    dialogue_mode="唤醒确认",
+                    asr_seconds=asr_seconds,
+                    generation_seconds=0.0,
+                    used_companion_model=False,
+                    light_execution=unchanged,
+                    response_required=True,
+                    wake_word_status=decision.status,
+                )
+            transcript = decision.transcript
+
         speaker = self._verify_speaker(request.audio_path)
         profile_trusted = not speaker.enrolled or speaker.is_owner is True
         model_history = safe_history if profile_trusted else []
         model_user_name = request.user_name if profile_trusted else ""
         model_preferences = request.preferences if profile_trusted else ""
-        asr_started = time.perf_counter()
-        transcript = self.asr.transcribe(request.audio_path)
-        asr_seconds = time.perf_counter() - asr_started
 
         command = interpret_light_command(transcript, request.brightness)
         execution = self.light_driver.apply(command)
@@ -168,6 +231,7 @@ class TurnEngine:
         status = (
             f"文字已生成｜ASR {asr_seconds:.2f} 秒"
             f"｜{generation_status}｜{guidance.mode}｜{speaker.status}"
+            f"{f'｜{wake_word_status}' if wake_word_status else ''}"
             "｜正在生成语音…"
         )
 
@@ -184,4 +248,6 @@ class TurnEngine:
             used_companion_model=used_companion_model,
             light_execution=replace(execution, actual=light.brightness),
             speaker_verification=speaker,
+            response_required=True,
+            wake_word_status=wake_word_status,
         )

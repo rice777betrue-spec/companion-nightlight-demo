@@ -235,6 +235,14 @@ def update_vad_sensitivity(value: float) -> str:
     return hands_free.status_text
 
 
+def save_wake_word(phrase: str) -> tuple[str, str]:
+    try:
+        status = pipeline.set_wake_word(phrase)
+    except Exception as exc:
+        return pipeline.wake_word_phrase, f"唤醒词修改失败：{exc}"
+    return pipeline.wake_word_phrase, status
+
+
 def enroll_owner_voiceprint(
     audio_path: str | None,
     owner_name: str,
@@ -266,6 +274,7 @@ def poll_runtime(last_result_version: int | float | None):
         pipeline.warmup_status,
         pipeline.device_runtime.status_text,
         hands_free.status_text,
+        pipeline.wake_word_status_text,
         pipeline.voiceprint_status_text,
     )
     if snapshot.result_version == current_version:
@@ -335,8 +344,8 @@ def preset_full(previous):
 with gr.Blocks(title="陪伴小夜灯 Demo") as demo:
     gr.Markdown(
         "# 陪伴小夜灯 · 电脑 Demo\n"
-        "开启一次免按键模式后，直接对它说话即可；它会自动判断一句话结束、"
-        "回答、播报，也能完成灯光调节。"
+        "开启免按键模式后，待机时先说唤醒词；唤醒后可以自然连续聊天，"
+        "空闲超时才需要重新唤醒。"
     )
     history_state = gr.State([])
     brightness_state = gr.State(35)
@@ -347,7 +356,7 @@ with gr.Blocks(title="陪伴小夜灯 Demo") as demo:
             hands_free_toggle = gr.Checkbox(
                 label="免按键连续对话",
                 value=settings.hands_free_auto_start,
-                info="打开一次后无需再点回应按钮",
+                info="打开后无需再点回应按钮，待机时使用唤醒词",
             )
             vad_sensitivity = gr.Slider(
                 minimum=0.5,
@@ -362,7 +371,25 @@ with gr.Blocks(title="陪伴小夜灯 Demo") as demo:
             value=hands_free.status_text,
             interactive=False,
         )
+        with gr.Row():
+            wake_word_input = gr.Textbox(
+                label="自定义唤醒词",
+                value=pipeline.wake_word_phrase,
+                info="2～20 个汉字或字母，保存后立即生效",
+            )
+            save_wake_word_button = gr.Button(
+                "保存唤醒词",
+                variant="primary",
+            )
+        wake_word_status = gr.Textbox(
+            label="唤醒 / 待机状态",
+            value=pipeline.wake_word_status_text,
+            interactive=False,
+        )
         gr.Markdown(
+            "只说当前唤醒词会得到唤醒确认；也可以把唤醒词和“关灯”放在同一句。"
+            "每轮回答播放结束后重新计算 "
+            f"{int(settings.wake_session_seconds)} 秒空闲时间，期间聊天无需重复唤醒。\n\n"
             "电脑基础版使用 WebRTC VAD + 自适应能量门限，开启后先保持安静约 1 秒校准噪声。"
             "回答播放时可以说话打断；若扬声器回声造成误触发，可先戴耳机测试，"
             "设备版再接入 AEC 回声消除。"
@@ -403,6 +430,7 @@ with gr.Blocks(title="陪伴小夜灯 Demo") as demo:
                 gr.Markdown(
                     "这个控件使用浏览器麦克风，和上方后台 Realtek 麦克风相互独立。"
                     "内置浏览器即使显示“找不到麦克风”，也不影响免按键模式。"
+                    "手动调试模式会直接处理录音，不要求唤醒词。"
                 )
                 audio_input = gr.Audio(
                     sources=["microphone", "upload"],
@@ -469,6 +497,7 @@ with gr.Blocks(title="陪伴小夜灯 Demo") as demo:
             model_state,
             device_state,
             hands_free_status,
+            wake_word_status,
             voiceprint_status,
             transcript_box,
             reply_box,
@@ -480,6 +509,19 @@ with gr.Blocks(title="陪伴小夜灯 Demo") as demo:
             light_status,
             hands_free_version,
         ],
+        queue=False,
+    )
+
+    save_wake_word_button.click(
+        fn=save_wake_word,
+        inputs=[wake_word_input],
+        outputs=[wake_word_input, wake_word_status],
+        queue=False,
+    )
+    wake_word_input.submit(
+        fn=save_wake_word,
+        inputs=[wake_word_input],
+        outputs=[wake_word_input, wake_word_status],
         queue=False,
     )
 

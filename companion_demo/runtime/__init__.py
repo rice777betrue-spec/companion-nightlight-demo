@@ -17,6 +17,7 @@ from companion_demo.runtime.hands_free import (
     UtteranceSegmenter,
 )
 from companion_demo.runtime.turn_engine import TurnEngine
+from companion_demo.runtime.wake_word import WakeWordController
 
 __all__ = [
     "DeviceEvent",
@@ -32,4 +33,5 @@ __all__ = [
     "SegmentEventKind",
     "TurnEngine",
     "UtteranceSegmenter",
+    "WakeWordController",
 ]

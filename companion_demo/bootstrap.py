@@ -12,12 +12,17 @@ from companion_demo.adapters.pc import (
 )
 from companion_demo.config import Settings, settings
 from companion_demo.pipeline import DemoPipeline
-from companion_demo.runtime import HandsFreeRuntime
+from companion_demo.runtime import HandsFreeRuntime, WakeWordController
 
 
 def build_pc_pipeline(config: Settings = settings) -> DemoPipeline:
     """组合当前电脑端适配器；未来设备端将提供独立组合入口。"""
 
+    wake_word_gate = WakeWordController(
+        config.wake_word_path,
+        default_phrase=config.wake_word,
+        session_seconds=config.wake_session_seconds,
+    )
     return DemoPipeline(
         asr=FasterWhisperAdapter(
             config.asr_model,
@@ -40,6 +45,7 @@ def build_pc_pipeline(config: Settings = settings) -> DemoPipeline:
             threshold=config.voiceprint_threshold,
             required_samples=config.voiceprint_required_samples,
         ),
+        wake_word_gate=wake_word_gate,
     )
 
 
@@ -60,5 +66,7 @@ def build_pc_hands_free(
         device_runtime=pipeline.device_runtime,
         handle_turn=pipeline.handle_turn,
         synthesize_reply=pipeline.synthesize_reply,
+        refresh_wake_session=pipeline.refresh_wake_session,
+        sleep_wake_session=pipeline.sleep_wake_session,
         output_dir=config.output_dir,
     )

@@ -9,6 +9,7 @@ from companion_demo.core.contracts import (
     SpeakerVerification,
     VadDecision,
     VoiceprintEnrollment,
+    WakeWordDecision,
 )
 from companion_demo.light import LightAdjustment
 
@@ -56,6 +57,28 @@ class SpeakerVerificationPort(Protocol):
     def verify(self, audio_path: str) -> SpeakerVerification: ...
 
     def clear(self) -> str: ...
+
+
+class WakeWordGatePort(Protocol):
+    """可动态修改的唤醒门控；设备端可替换为专用 KWS。"""
+
+    @property
+    def phrase(self) -> str: ...
+
+    @property
+    def status_text(self) -> str: ...
+
+    def set_phrase(self, phrase: str) -> str: ...
+
+    def refresh_session(self, now: float | None = None) -> str: ...
+
+    def sleep(self, detail: str | None = None) -> str: ...
+
+    def evaluate(
+        self,
+        transcript: str,
+        now: float | None = None,
+    ) -> WakeWordDecision: ...
 
 
 class AudioInputPort(Protocol):

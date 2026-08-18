@@ -16,7 +16,7 @@ _NIGHTLIGHT_INITIAL_PROMPT = (
 )
 
 _NIGHTLIGHT_HOTWORDS = (
-    "小夜灯 灯光 亮度 开灯 关灯 调亮 调暗 调高 调低 "
+    "灯光 亮度 开灯 关灯 调亮 调暗 调高 调低 "
     "亮一点 暗一点 柔和一点 百分之 睡眠模式 阅读模式"
 )
 
@@ -24,6 +24,7 @@ _PROMPT_HALLUCINATION_MARKERS = (
     "请准确使用这些词",
     "以下是陪伴小夜灯",
     "常见词汇",
+    "当前设备唤醒词",
 )
 
 
@@ -41,6 +42,17 @@ class SpeechRecognizer:
         self.local_files_only = local_files_only
         self._model: WhisperModel | None = None
         self._load_lock = threading.Lock()
+        self._prompt_lock = threading.RLock()
+        self._wake_word = "小夜灯"
+
+    def set_wake_word(self, phrase: str) -> None:
+        """动态加入识别提示，无需重新加载或训练 Whisper。"""
+
+        value = str(phrase or "").strip()
+        if not value:
+            return
+        with self._prompt_lock:
+            self._wake_word = value
 
     def load(self) -> None:
         if self._model is not None:
@@ -61,6 +73,12 @@ class SpeechRecognizer:
     def transcribe(self, audio_path: str | Path) -> str:
         self.load()
         assert self._model is not None
+        with self._prompt_lock:
+            wake_word = self._wake_word
+        initial_prompt = (
+            f"{_NIGHTLIGHT_INITIAL_PROMPT} 当前设备唤醒词：{wake_word}。"
+        )
+        hotwords = f"{wake_word} {_NIGHTLIGHT_HOTWORDS}"
 
         segments, _ = self._model.transcribe(
             str(audio_path),
@@ -68,8 +86,8 @@ class SpeechRecognizer:
             beam_size=5,
             vad_filter=True,
             condition_on_previous_text=False,
-            initial_prompt=_NIGHTLIGHT_INITIAL_PROMPT,
-            hotwords=_NIGHTLIGHT_HOTWORDS,
+            initial_prompt=initial_prompt,
+            hotwords=hotwords,
         )
         detected_segments = list(segments)
         text = to_simplified_chinese(

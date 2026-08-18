@@ -45,6 +45,13 @@ class Settings:
     voiceprint_required_samples: int = int(
         os.getenv("VOICEPRINT_REQUIRED_SAMPLES", "3")
     )
+    wake_word_path: Path = (
+        PROJECT_ROOT / ".cache" / "device" / "wake_word.json"
+    )
+    wake_word: str = os.getenv("WAKE_WORD", "小夜灯").strip() or "小夜灯"
+    wake_session_seconds: float = float(
+        os.getenv("WAKE_SESSION_SECONDS", "30")
+    )
 
 
 settings = Settings()

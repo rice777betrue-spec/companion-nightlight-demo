@@ -164,8 +164,11 @@ class HandsFreeRuntimeTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
+            captured_requests = []
+            wake_session_refreshed = threading.Event()
 
-            def handle_turn(_request) -> TurnResult:
+            def handle_turn(request) -> TurnResult:
+                captured_requests.append(request)
                 execution = LightExecution(35, 0, 0, True, "灯已关闭")
                 return TurnResult(
                     transcript="关灯",
@@ -195,6 +198,10 @@ class HandsFreeRuntimeTests(unittest.TestCase):
                     output.writeframes(_frame().pcm_s16le)
                 return str(path), "测试 TTS"
 
+            def refresh_wake_session() -> str:
+                wake_session_refreshed.set()
+                return "连续会话已刷新"
+
             runtime = HandsFreeRuntime(
                 audio_input=audio,
                 vad=_FakeVad(),
@@ -202,6 +209,7 @@ class HandsFreeRuntimeTests(unittest.TestCase):
                 device_runtime=device,
                 handle_turn=handle_turn,
                 synthesize_reply=synthesize,
+                refresh_wake_session=refresh_wake_session,
                 output_dir=output_dir,
                 config=HandsFreeConfig(
                     pre_roll_ms=20,
@@ -233,6 +241,8 @@ class HandsFreeRuntimeTests(unittest.TestCase):
             self.assertEqual(snapshot.transcript, "关灯")
             self.assertEqual(snapshot.brightness, 0)
             self.assertEqual(snapshot.history_messages[-1]["role"], "assistant")
+            self.assertTrue(captured_requests[0].require_wake_word)
+            self.assertTrue(wake_session_refreshed.is_set())
             runtime.shutdown()
 
 

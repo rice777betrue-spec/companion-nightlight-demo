@@ -199,6 +199,8 @@ class HandsFreeRuntime:
         handle_turn: Callable[[TurnRequest], TurnResult],
         synthesize_reply: Callable[[str], tuple[str | None, str]],
         output_dir: Path,
+        refresh_wake_session: Callable[[], str] | None = None,
+        sleep_wake_session: Callable[[], str] | None = None,
         config: HandsFreeConfig | None = None,
     ) -> None:
         self.audio_input = audio_input
@@ -208,6 +210,8 @@ class HandsFreeRuntime:
         self.handle_turn = handle_turn
         self.synthesize_reply = synthesize_reply
         self.output_dir = Path(output_dir)
+        self.refresh_wake_session = refresh_wake_session
+        self.sleep_wake_session = sleep_wake_session
         self.config = config or HandsFreeConfig()
         self._segmenter = UtteranceSegmenter.from_config(self.config)
         self._pending: queue.Queue[_CapturedUtterance] = queue.Queue(maxsize=1)
@@ -343,6 +347,8 @@ class HandsFreeRuntime:
                 self._active_turn_id = None
                 self._drain_pending()
                 self.device_runtime.cancel_current("免按键监听已关闭")
+                if self.sleep_wake_session is not None:
+                    self.sleep_wake_session()
                 with self._lock:
                     self._snapshot = replace(
                         self._snapshot,
@@ -418,7 +424,7 @@ class HandsFreeRuntime:
                         not self._segmenter.active
                         and self.device_runtime.snapshot.state == DeviceState.IDLE
                     ):
-                        self._set_activity("正在监听，直接说话即可")
+                        self._set_activity("正在监听，请按唤醒状态说话")
                     continue
                 if event.kind == SegmentEventKind.STARTED:
                     self._on_speech_started()
@@ -521,16 +527,27 @@ class HandsFreeRuntime:
                     user_name=user_name,
                     preferences=preferences,
                     brightness=previous_brightness,
+                    require_wake_word=True,
                 )
             )
         except NoSpeechDetectedError as exc:
+            self._refresh_wake_session()
             if self.device_runtime.is_current(item.turn_id):
                 self.device_runtime.cancel_current("没有听清，继续监听")
                 self._publish_not_understood(str(exc))
             return
         except Exception as exc:
+            self._refresh_wake_session()
             if self.device_runtime.fail(str(exc), item.turn_id):
                 self._publish_error(str(exc))
+            return
+
+        if not result.response_required:
+            if self.device_runtime.is_current(item.turn_id):
+                self.device_runtime.cancel_current(
+                    result.wake_word_status or "未检测到唤醒词，返回待机"
+                )
+                self._set_activity(result.status)
             return
 
         if not self.device_runtime.response_ready(
@@ -551,6 +568,7 @@ class HandsFreeRuntime:
 
         if audio_reply is None:
             self.device_runtime.playback_finished(item.turn_id)
+            self._refresh_wake_session()
             self._set_activity("语音生成失败，已保留文字回答")
             return
 
@@ -566,10 +584,19 @@ class HandsFreeRuntime:
 
         if self.device_runtime.is_current(item.turn_id):
             self.device_runtime.playback_finished(item.turn_id)
+            self._refresh_wake_session()
             if playback_error:
                 self._set_activity("自动播放失败，文字回答仍可用", playback_error)
             else:
                 self._set_activity("回答结束，正在监听下一句话")
+
+    def _refresh_wake_session(self) -> None:
+        if self.refresh_wake_session is None:
+            return
+        try:
+            self.refresh_wake_session()
+        except Exception:
+            pass
 
     def _publish_result(
         self,
