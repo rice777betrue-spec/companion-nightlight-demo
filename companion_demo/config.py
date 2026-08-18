@@ -36,6 +36,15 @@ class Settings:
     audio_input_device: str | None = (
         os.getenv("AUDIO_INPUT_DEVICE", "").strip() or None
     )
+    voiceprint_profile_path: Path = (
+        PROJECT_ROOT / ".cache" / "voiceprint" / "owner_voiceprint.npz"
+    )
+    voiceprint_threshold: float = float(
+        os.getenv("VOICEPRINT_THRESHOLD", "0.82")
+    )
+    voiceprint_required_samples: int = int(
+        os.getenv("VOICEPRINT_REQUIRED_SAMPLES", "3")
+    )
 
 
 settings = Settings()

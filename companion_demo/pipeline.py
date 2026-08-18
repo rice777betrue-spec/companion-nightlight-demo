@@ -10,10 +10,15 @@ from companion_demo.adapters.pc import (
     VirtualLightDriver,
 )
 from companion_demo.config import settings
-from companion_demo.core.contracts import TurnRequest, TurnResult
+from companion_demo.core.contracts import (
+    TurnRequest,
+    TurnResult,
+    VoiceprintEnrollment,
+)
 from companion_demo.ports.services import (
     CompanionModelPort,
     LightDriverPort,
+    SpeakerVerificationPort,
     SpeechRecognitionPort,
     SpeechSynthesisPort,
 )
@@ -30,6 +35,7 @@ class DemoPipeline:
         companion: CompanionModelPort | None = None,
         tts: SpeechSynthesisPort | None = None,
         light_driver: LightDriverPort | None = None,
+        speaker_verifier: SpeakerVerificationPort | None = None,
         device_runtime: DeviceRuntime | None = None,
     ) -> None:
         self.asr = asr or FasterWhisperAdapter(
@@ -48,10 +54,12 @@ class DemoPipeline:
             sapi_voice=settings.sapi_voice,
         )
         self.light_driver = light_driver or VirtualLightDriver()
+        self.speaker_verifier = speaker_verifier
         self.turn_engine = TurnEngine(
             self.asr,
             self.companion,
             self.light_driver,
+            self.speaker_verifier,
         )
         self.device_runtime = device_runtime or DeviceRuntime()
         self._warmup_status = "模型尚未预热"
@@ -64,6 +72,26 @@ class DemoPipeline:
     def warmup_status(self) -> str:
         with self._status_lock:
             return self._warmup_status
+
+    @property
+    def voiceprint_status_text(self) -> str:
+        if self.speaker_verifier is None:
+            return "声纹模块未配置"
+        return self.speaker_verifier.status_text
+
+    def enroll_voiceprint(
+        self,
+        audio_path: str,
+        owner_name: str = "",
+    ) -> VoiceprintEnrollment:
+        if self.speaker_verifier is None:
+            raise RuntimeError("声纹模块未配置")
+        return self.speaker_verifier.enroll(audio_path, owner_name)
+
+    def clear_voiceprint(self) -> str:
+        if self.speaker_verifier is None:
+            return "声纹模块未配置"
+        return self.speaker_verifier.clear()
 
     def _set_warmup_status(self, value: str) -> None:
         with self._status_lock:
@@ -80,7 +108,8 @@ class DemoPipeline:
             elapsed = time.perf_counter() - started
             self._set_warmup_status(
                 f"模型已就绪｜Whisper 本地｜Qwen {self.companion.device_label}"
-                f"｜TTS {self.tts.engine_label}｜预热 {elapsed:.1f} 秒"
+                f"｜TTS {self.tts.engine_label}｜{self.voiceprint_status_text}"
+                f"｜预热 {elapsed:.1f} 秒"
             )
             self.device_runtime.models_ready()
         except Exception as exc:

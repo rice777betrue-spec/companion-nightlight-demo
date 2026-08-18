@@ -235,6 +235,30 @@ def update_vad_sensitivity(value: float) -> str:
     return hands_free.status_text
 
 
+def enroll_owner_voiceprint(
+    audio_path: str | None,
+    owner_name: str,
+) -> str:
+    if not audio_path:
+        return "请先录制一段 2～5 秒的主人语音"
+    hands_free.interrupt_playback()
+    try:
+        result = pipeline.enroll_voiceprint(audio_path, owner_name)
+    except Exception as exc:
+        return f"声纹录入失败：{exc}"
+    if result.ready:
+        return f"{result.status}｜后续每轮对话都会自动验证身份"
+    remaining = result.required_samples - result.sample_count
+    return f"{result.status}｜请再录 {remaining} 段不同句子"
+
+
+def clear_owner_voiceprint() -> str:
+    try:
+        return pipeline.clear_voiceprint()
+    except Exception as exc:
+        return f"声纹删除失败：{exc}"
+
+
 def poll_runtime(last_result_version: int | float | None):
     snapshot = hands_free.snapshot
     current_version = int(last_result_version or 0)
@@ -242,6 +266,7 @@ def poll_runtime(last_result_version: int | float | None):
         pipeline.warmup_status,
         pipeline.device_runtime.status_text,
         hands_free.status_text,
+        pipeline.voiceprint_status_text,
     )
     if snapshot.result_version == current_version:
         return common + (gr.skip(),) * 8 + (current_version,)
@@ -343,6 +368,35 @@ with gr.Blocks(title="陪伴小夜灯 Demo") as demo:
             "设备版再接入 AEC 回声消除。"
         )
 
+    with gr.Accordion("声纹认主（电脑验证版）", open=True):
+        gr.Markdown(
+            "由主人分别录制 **3 段 2～5 秒的不同句子**，每录一段点击一次录入。"
+            "声纹只保存在本机 `.cache`，不会上传 GitHub。验证为访客时，"
+            "仍可聊天和控制灯光，但不会读取主人的称呼、偏好和历史对话。"
+        )
+        with gr.Row():
+            voiceprint_audio = gr.Audio(
+                sources=["microphone", "upload"],
+                type="filepath",
+                format="wav",
+                label="主人声纹录音",
+            )
+            with gr.Column():
+                voiceprint_status = gr.Textbox(
+                    label="声纹身份状态",
+                    value=pipeline.voiceprint_status_text,
+                    interactive=False,
+                )
+                with gr.Row():
+                    enroll_voiceprint_button = gr.Button(
+                        "录入当前语音",
+                        variant="primary",
+                    )
+                    clear_voiceprint_button = gr.Button(
+                        "删除主人声纹",
+                        variant="stop",
+                    )
+
     with gr.Row():
         with gr.Column(scale=3):
             with gr.Accordion("手动录音 / 上传（调试备用）", open=False):
@@ -415,6 +469,7 @@ with gr.Blocks(title="陪伴小夜灯 Demo") as demo:
             model_state,
             device_state,
             hands_free_status,
+            voiceprint_status,
             transcript_box,
             reply_box,
             lamp,
@@ -456,6 +511,16 @@ with gr.Blocks(title="陪伴小夜灯 Demo") as demo:
         fn=update_vad_sensitivity,
         inputs=[vad_sensitivity],
         outputs=[hands_free_status],
+        queue=False,
+    )
+    enroll_voiceprint_button.click(
+        fn=enroll_owner_voiceprint,
+        inputs=[voiceprint_audio, user_name],
+        outputs=[voiceprint_status],
+    )
+    clear_voiceprint_button.click(
+        fn=clear_owner_voiceprint,
+        outputs=[voiceprint_status],
         queue=False,
     )
 

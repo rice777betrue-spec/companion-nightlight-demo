@@ -33,6 +33,29 @@ class VadDecision:
 
 
 @dataclass(frozen=True)
+class SpeakerVerification:
+    """一次声纹验证结果；分数只用于调试，权限判断以 is_owner 为准。"""
+
+    identity: str
+    enrolled: bool
+    is_owner: bool | None
+    score: float | None
+    threshold: float
+    sample_count: int
+    status: str
+
+
+@dataclass(frozen=True)
+class VoiceprintEnrollment:
+    """主人声纹录入进度。"""
+
+    sample_count: int
+    required_samples: int
+    ready: bool
+    status: str
+
+
+@dataclass(frozen=True)
 class TurnRequest:
     """一次语音交互的统一输入，与 Gradio 或设备界面无关。"""
 
@@ -70,3 +93,4 @@ class TurnResult:
     generation_seconds: float
     used_companion_model: bool
     light_execution: LightExecution
+    speaker_verification: SpeakerVerification | None = None

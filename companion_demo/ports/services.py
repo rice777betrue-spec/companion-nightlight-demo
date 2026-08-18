@@ -6,7 +6,9 @@ from companion_demo.core.contracts import (
     AudioFrame,
     ChatMessage,
     LightExecution,
+    SpeakerVerification,
     VadDecision,
+    VoiceprintEnrollment,
 )
 from companion_demo.light import LightAdjustment
 
@@ -37,6 +39,23 @@ class SpeechSynthesisPort(Protocol):
     def engine_label(self) -> str: ...
 
     def synthesize(self, text: str) -> str: ...
+
+
+class SpeakerVerificationPort(Protocol):
+    """声纹注册与验证端口，可替换为 ECAPA、ONNX 或 RKNN 实现。"""
+
+    @property
+    def status_text(self) -> str: ...
+
+    def enroll(
+        self,
+        audio_path: str,
+        owner_name: str = "",
+    ) -> VoiceprintEnrollment: ...
+
+    def verify(self, audio_path: str) -> SpeakerVerification: ...
+
+    def clear(self) -> str: ...
 
 
 class AudioInputPort(Protocol):

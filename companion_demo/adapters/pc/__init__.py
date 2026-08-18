@@ -12,12 +12,14 @@ from companion_demo.adapters.pc.models import (
     LocalQwenAdapter,
     LocalSpeechSynthesizerAdapter,
 )
+from companion_demo.adapters.pc.voiceprint import LocalVoiceprintAdapter
 
 __all__ = [
     "AdaptiveEnergyVad",
     "FasterWhisperAdapter",
     "LocalQwenAdapter",
     "LocalSpeechSynthesizerAdapter",
+    "LocalVoiceprintAdapter",
     "SoundDeviceAudioInput",
     "VirtualLightDriver",
     "WebRtcEnergyVad",

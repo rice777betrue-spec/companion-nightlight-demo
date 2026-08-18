@@ -3,7 +3,12 @@ from __future__ import annotations
 import time
 from dataclasses import replace
 
-from companion_demo.core.contracts import LightExecution, TurnRequest, TurnResult
+from companion_demo.core.contracts import (
+    LightExecution,
+    SpeakerVerification,
+    TurnRequest,
+    TurnResult,
+)
 from companion_demo.dialogue import choose_dialogue_guidance
 from companion_demo.light import (
     LightAdjustment,
@@ -13,6 +18,7 @@ from companion_demo.light import (
 from companion_demo.ports.services import (
     CompanionModelPort,
     LightDriverPort,
+    SpeakerVerificationPort,
     SpeechRecognitionPort,
 )
 
@@ -25,10 +31,36 @@ class TurnEngine:
         asr: SpeechRecognitionPort,
         companion: CompanionModelPort,
         light_driver: LightDriverPort,
+        speaker_verifier: SpeakerVerificationPort | None = None,
     ) -> None:
         self.asr = asr
         self.companion = companion
         self.light_driver = light_driver
+        self.speaker_verifier = speaker_verifier
+
+    def _verify_speaker(self, audio_path: str) -> SpeakerVerification:
+        if self.speaker_verifier is None:
+            return SpeakerVerification(
+                identity="not_enrolled",
+                enrolled=False,
+                is_owner=None,
+                score=None,
+                threshold=0.0,
+                sample_count=0,
+                status="声纹未启用",
+            )
+        try:
+            return self.speaker_verifier.verify(audio_path)
+        except Exception as exc:
+            return SpeakerVerification(
+                identity="unverified",
+                enrolled=True,
+                is_owner=False,
+                score=None,
+                threshold=0.0,
+                sample_count=0,
+                status=f"声纹模块异常：{exc}",
+            )
 
     @staticmethod
     def _resolve_light_execution(
@@ -68,6 +100,11 @@ class TurnEngine:
             raise ValueError("请先录一段话。")
 
         safe_history = list(request.history or [])
+        speaker = self._verify_speaker(request.audio_path)
+        profile_trusted = not speaker.enrolled or speaker.is_owner is True
+        model_history = safe_history if profile_trusted else []
+        model_user_name = request.user_name if profile_trusted else ""
+        model_preferences = request.preferences if profile_trusted else ""
         asr_started = time.perf_counter()
         transcript = self.asr.transcribe(request.audio_path)
         asr_seconds = time.perf_counter() - asr_started
@@ -85,6 +122,12 @@ class TurnEngine:
             generation_status = "灯控即时确认"
         else:
             model_input = f"{transcript}\n\n{guidance.instruction}"
+            if not profile_trusted:
+                model_input += (
+                    "\n\n[声纹没有确认对方是主人。把对方视为访客，"
+                    "礼貌自然地回应，但不要提及、推断或泄露主人的姓名、"
+                    "偏好和历史对话。]"
+                )
             if light.intent_detected:
                 if light.matched:
                     model_input += (
@@ -101,9 +144,9 @@ class TurnEngine:
             generation_started = time.perf_counter()
             companion_reply = self.companion.reply(
                 model_input,
-                safe_history,
-                request.user_name,
-                request.preferences,
+                model_history,
+                model_user_name,
+                model_preferences,
             )
             generation_seconds = time.perf_counter() - generation_started
             used_companion_model = True
@@ -114,16 +157,18 @@ class TurnEngine:
             )
             generation_status = f"Qwen {generation_seconds:.2f} 秒"
 
-        safe_history.extend(
-            [
-                {"role": "user", "content": transcript},
-                {"role": "assistant", "content": reply},
-            ]
-        )
-        safe_history = safe_history[-12:]
+        if profile_trusted:
+            safe_history.extend(
+                [
+                    {"role": "user", "content": transcript},
+                    {"role": "assistant", "content": reply},
+                ]
+            )
+            safe_history = safe_history[-12:]
         status = (
             f"文字已生成｜ASR {asr_seconds:.2f} 秒"
-            f"｜{generation_status}｜{guidance.mode}｜正在生成语音…"
+            f"｜{generation_status}｜{guidance.mode}｜{speaker.status}"
+            "｜正在生成语音…"
         )
 
         return TurnResult(
@@ -138,4 +183,5 @@ class TurnEngine:
             generation_seconds=generation_seconds,
             used_companion_model=used_companion_model,
             light_execution=replace(execution, actual=light.brightness),
+            speaker_verification=speaker,
         )

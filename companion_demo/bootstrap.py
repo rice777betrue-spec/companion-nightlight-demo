@@ -4,6 +4,7 @@ from companion_demo.adapters.pc import (
     FasterWhisperAdapter,
     LocalQwenAdapter,
     LocalSpeechSynthesizerAdapter,
+    LocalVoiceprintAdapter,
     SoundDeviceAudioInput,
     VirtualLightDriver,
     WebRtcEnergyVad,
@@ -34,6 +35,11 @@ def build_pc_pipeline(config: Settings = settings) -> DemoPipeline:
             sapi_voice=config.sapi_voice,
         ),
         light_driver=VirtualLightDriver(),
+        speaker_verifier=LocalVoiceprintAdapter(
+            config.voiceprint_profile_path,
+            threshold=config.voiceprint_threshold,
+            required_samples=config.voiceprint_required_samples,
+        ),
     )
 
 
