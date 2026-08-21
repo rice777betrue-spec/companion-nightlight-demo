@@ -14,4 +14,4 @@ class LocalQwenAdapter(LocalCompanion):
 
 
 class LocalSpeechSynthesizerAdapter(SpeechSynthesizer):
-    """电脑端 SAPI/Edge TTS 实现。"""
+    """电脑端 SAPI/Edge/VoxCPM TTS 实现。"""

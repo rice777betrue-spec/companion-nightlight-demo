@@ -133,6 +133,12 @@ HANDS_FREE_AUTO_START=1
 可以避开首次加载的等待。Windows Demo 默认使用本机的 Microsoft Huihui 中文语音；
 本地语音不可用时自动退回 Edge 在线 TTS，而且语音生成不会阻塞文字回答显示。
 
+实验分支还支持 VoxCPM-0.5B 本地语音合成。将官方权重放到
+`.cache/models/VoxCPM-0.5B`，并在 `.env` 中设置 `TTS_ENGINE=voxcpm` 即可启用。
+模型在第一次回答时才加载；如果依赖、模型或显存异常，会自动回退到 SAPI。需要克隆
+音色时，同时配置 `VOXCPM_PROMPT_WAV` 和该参考录音逐字对应的
+`VOXCPM_PROMPT_TEXT`。VoxCPM 只替换 TTS，Whisper 和 Qwen 保持不变。
+
 陪伴模型默认使用 Qwen2.5-3B-Instruct，并通过 bitsandbytes NF4 4 位量化在电脑显卡上
 运行。相比原先的 1.5B，3B 对否定、因果、边界表达和具体处境的理解更稳定；量化后
 模型约占 2GB 显存。可通过 `.env` 的 `LLM_MODEL` 和 `LLM_QUANTIZATION` 切换模型，

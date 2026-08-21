@@ -56,6 +56,12 @@ class DemoPipeline:
             settings.output_dir,
             engine=settings.tts_engine,
             sapi_voice=settings.sapi_voice,
+            voxcpm_model=settings.voxcpm_model,
+            voxcpm_device=settings.voxcpm_device,
+            voxcpm_local_files_only=settings.model_offline,
+            voxcpm_prompt_wav=settings.voxcpm_prompt_wav,
+            voxcpm_prompt_text=settings.voxcpm_prompt_text,
+            voxcpm_inference_timesteps=settings.voxcpm_inference_timesteps,
         )
         self.light_driver = light_driver or VirtualLightDriver()
         self.speaker_verifier = speaker_verifier

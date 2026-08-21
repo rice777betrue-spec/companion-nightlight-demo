@@ -13,6 +13,7 @@ LOCAL_WHISPER_SMALL = (
     PROJECT_ROOT / ".cache" / "models" / "faster-whisper-small"
 )
 LOCAL_QWEN_3B = PROJECT_ROOT / ".cache" / "models" / "Qwen2.5-3B-Instruct"
+LOCAL_VOXCPM_05B = PROJECT_ROOT / ".cache" / "models" / "VoxCPM-0.5B"
 WHISPER_SMALL_READY = (
     (LOCAL_WHISPER_SMALL / "model.bin").is_file()
     and (LOCAL_WHISPER_SMALL / "model.bin").stat().st_size == 483_546_902
@@ -48,6 +49,17 @@ class Settings:
     tts_engine: str = os.getenv("TTS_ENGINE", "sapi").strip().lower()
     tts_voice: str = os.getenv("TTS_VOICE", "zh-CN-XiaoxiaoNeural")
     sapi_voice: str = os.getenv("SAPI_VOICE", "Microsoft Huihui Desktop")
+    voxcpm_model: str = os.getenv("VOXCPM_MODEL", str(LOCAL_VOXCPM_05B))
+    voxcpm_device: str = os.getenv("VOXCPM_DEVICE", "cuda").strip().lower()
+    voxcpm_prompt_wav: str | None = (
+        os.getenv("VOXCPM_PROMPT_WAV", "").strip() or None
+    )
+    voxcpm_prompt_text: str | None = (
+        os.getenv("VOXCPM_PROMPT_TEXT", "").strip() or None
+    )
+    voxcpm_inference_timesteps: int = int(
+        os.getenv("VOXCPM_INFERENCE_TIMESTEPS", "10")
+    )
     server_port: int = int(os.getenv("SERVER_PORT", "7860"))
     model_offline: bool = _env_flag("MODEL_OFFLINE", True)
     hands_free_auto_start: bool = _env_flag("HANDS_FREE_AUTO_START", False)

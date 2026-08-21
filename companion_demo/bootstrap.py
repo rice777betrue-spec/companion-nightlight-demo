@@ -39,6 +39,12 @@ def build_pc_pipeline(config: Settings = settings) -> DemoPipeline:
             config.output_dir,
             engine=config.tts_engine,
             sapi_voice=config.sapi_voice,
+            voxcpm_model=config.voxcpm_model,
+            voxcpm_device=config.voxcpm_device,
+            voxcpm_local_files_only=config.model_offline,
+            voxcpm_prompt_wav=config.voxcpm_prompt_wav,
+            voxcpm_prompt_text=config.voxcpm_prompt_text,
+            voxcpm_inference_timesteps=config.voxcpm_inference_timesteps,
         ),
         light_driver=VirtualLightDriver(),
         speaker_verifier=LocalVoiceprintAdapter(
