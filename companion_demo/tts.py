@@ -64,11 +64,9 @@ class SpeechSynthesizer:
                 output_path = self._synthesize_voxcpm(text)
                 self._active_engine = "VoxCPM-0.5B 本地"
                 return output_path
-            except Exception:
-                # 实验后端显存不足或依赖异常时，设备仍必须能够发声。
-                output_path = self._synthesize_sapi(text)
-                self._active_engine = "SAPI 本地（VoxCPM 降级）"
-                return output_path
+            except Exception as exc:
+                self._active_engine = "VoxCPM-0.5B 本地（异常）"
+                raise RuntimeError(f"VoxCPM 语音生成失败：{exc}") from exc
 
         if self.engine == "sapi":
             try:

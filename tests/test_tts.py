@@ -26,10 +26,9 @@ class SpeechSynthesizerTests(TestCase):
                 self.assertEqual(synthesizer.synthesize("你好"), expected)
             self.assertEqual(synthesizer.engine_label, "VoxCPM-0.5B 本地")
 
-    def test_voxcpm_failure_falls_back_to_sapi(self) -> None:
+    def test_voxcpm_failure_does_not_fall_back_to_sapi(self) -> None:
         with TemporaryDirectory() as directory:
             synthesizer = self._synthesizer(Path(directory))
-            expected = str(Path(directory) / "fallback.wav")
             with (
                 patch.object(
                     synthesizer,
@@ -39,11 +38,12 @@ class SpeechSynthesizerTests(TestCase):
                 patch.object(
                     synthesizer,
                     "_synthesize_sapi",
-                    return_value=expected,
-                ),
+                ) as sapi,
             ):
-                self.assertEqual(synthesizer.synthesize("你好"), expected)
+                with self.assertRaisesRegex(RuntimeError, "VoxCPM"):
+                    synthesizer.synthesize("你好")
+            sapi.assert_not_called()
             self.assertEqual(
                 synthesizer.engine_label,
-                "SAPI 本地（VoxCPM 降级）",
+                "VoxCPM-0.5B 本地（异常）",
             )
