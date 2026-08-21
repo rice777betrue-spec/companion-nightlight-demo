@@ -139,8 +139,9 @@ HANDS_FREE_AUTO_START=1
 回答并显示错误，不会回退到 SAPI。需要克隆
 音色时，同时配置 `VOXCPM_PROMPT_WAV` 和该参考录音逐字对应的
 `VOXCPM_PROMPT_TEXT`。VoxCPM 只替换 TTS，Whisper 和 Qwen 保持不变。
-网页手动模式使用 VoxCPM 流式输出，完整语音尚未生成完即可开始播放；免按键模式暂时
-仍生成完整 WAV 后通过 Windows 扬声器播放。
+Windows未配置 `ffmpeg/ffprobe` 时，网页和免按键模式均生成完整WAV后播放，以避免
+Gradio流媒体转换失败。安装相关工具后可设置 `WEB_TTS_STREAMING=1` 重新启用网页
+流式输出。
 
 陪伴模型默认使用 Qwen2.5-3B-Instruct，并通过 bitsandbytes NF4 4 位量化在电脑显卡上
 运行。相比原先的 1.5B，3B 对否定、因果、边界表达和具体处境的理解更稳定；量化后

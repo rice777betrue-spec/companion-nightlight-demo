@@ -54,6 +54,7 @@ def build_pc_pipeline(config: Settings = settings) -> DemoPipeline:
         ),
         wake_word_gate=wake_word_gate,
         sleep_confirmation_timeout_seconds=config.wake_session_seconds,
+        web_tts_streaming_enabled=config.web_tts_streaming,
     )
 
 

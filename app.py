@@ -513,7 +513,7 @@ with gr.Blocks(title="陪伴小夜灯 Demo") as demo:
     audio_output = gr.Audio(
         label="手动模式回复音频",
         autoplay=True,
-        streaming=True,
+        streaming=settings.web_tts_streaming,
     )
     gr.Markdown(
         "Whisper 与 Qwen 会在启动后自动从本地缓存预热。文字回答先显示，"

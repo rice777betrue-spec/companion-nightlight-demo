@@ -60,6 +60,7 @@ class Settings:
     voxcpm_inference_timesteps: int = int(
         os.getenv("VOXCPM_INFERENCE_TIMESTEPS", "6")
     )
+    web_tts_streaming: bool = _env_flag("WEB_TTS_STREAMING", False)
     server_port: int = int(os.getenv("SERVER_PORT", "7860"))
     model_offline: bool = _env_flag("MODEL_OFFLINE", True)
     hands_free_auto_start: bool = _env_flag("HANDS_FREE_AUTO_START", False)

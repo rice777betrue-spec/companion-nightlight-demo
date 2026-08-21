@@ -42,6 +42,7 @@ class DemoPipeline:
         wake_word_gate: WakeWordGatePort | None = None,
         device_runtime: DeviceRuntime | None = None,
         sleep_confirmation_timeout_seconds: float = 30.0,
+        web_tts_streaming_enabled: bool = False,
     ) -> None:
         self.asr = asr or FasterWhisperAdapter(
             settings.asr_model,
@@ -84,6 +85,7 @@ class DemoPipeline:
         self._status_lock = threading.Lock()
         self._inference_lock = threading.Lock()
         self._tts_lock = threading.Lock()
+        self._web_tts_streaming_enabled = web_tts_streaming_enabled
         self._sync_asr_wake_word()
 
     @property
@@ -237,7 +239,9 @@ class DemoPipeline:
 
     @property
     def tts_supports_streaming(self) -> bool:
-        return bool(getattr(self.tts, "supports_streaming", False))
+        return self._web_tts_streaming_enabled and bool(
+            getattr(self.tts, "supports_streaming", False)
+        )
 
     def stream_reply(
         self,
