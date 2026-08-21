@@ -54,6 +54,12 @@ class SpeechRecognizer:
         with self._prompt_lock:
             self._wake_word = value
 
+    @property
+    def device_label(self) -> str:
+        model_label = str(self.model_name).replace("\\", "/").rstrip("/")
+        model_label = model_label.rsplit("/", 1)[-1]
+        return f"{model_label} {self.device}"
+
     def load(self) -> None:
         if self._model is not None:
             return

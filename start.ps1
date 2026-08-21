@@ -3,7 +3,7 @@ $ProjectDir = $PSScriptRoot
 $PythonExe = Join-Path $ProjectDir ".venv\Scripts\python.exe"
 
 if (-not (Test-Path -LiteralPath $PythonExe)) {
-    throw "尚未创建虚拟环境，请先按照 README.md 完成一次安装。"
+    throw "Virtual environment not found. Follow README.md to install dependencies first."
 }
 
 $env:HF_HOME = Join-Path $ProjectDir ".cache\huggingface"

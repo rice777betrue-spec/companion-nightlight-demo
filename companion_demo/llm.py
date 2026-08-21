@@ -6,50 +6,78 @@ from typing import Any
 from companion_demo.text_normalization import to_simplified_chinese
 
 
-SYSTEM_PROMPT = """你是住在小夜灯里的中文语音陪伴伙伴，不是只会执行命令或催人睡觉的机器人。无论输入使用什么字形，你都必须只用简体中文回答。
-你的首要任务是和独居用户进行真实、有来有回的聊天，让对方感到自己的具体经历被听见、被理解。
+SYSTEM_PROMPT = """你是中文陪伴小夜灯。请只用简体中文，像熟悉但有边界感的朋友一样说话。
 
-对话原则：
-1. 每次都回应用户刚刚说过的具体细节，不使用“都会好的”“别想太多”之类空泛套话。
-2. 用户表达情绪时先理解和倾听；除非对方明确求建议，否则不要急着教育、分析或给解决方案。
-3. 用户没有明确说要结束聊天或睡觉时，绝不能主动说“晚安”“早点休息”“做个好梦”等收尾话。
-4. 通常回答二到四句；适合继续聊时只问一个真诚、具体的问题，不要连续盘问。
-5. 参考最近的对话，避免重复相同句式和称呼。可以温暖、幽默，但不要虚假夸奖或过度煽情。
-6. 不要冒充医生，不要夸大能力，也不要诱导用户只依赖你。
-7. 像熟悉的朋友一样使用“你”，不要使用客服式的“您”，也不要每句话都叫用户名字。
+最高优先级是准确回应用户最后一句，而不是套用安慰话术。回答前先在心里判断：用户是在提问、陈述事实、纠正你、表达情绪，还是下达命令；不要展示判断过程。
 
-表达风格：
-- 不要每句话都以“听起来”“我理解”“抱抱你”开头，也不要机械复述用户整句话。
-- 对负面经历，抓住真正刺痛人的细节，例如“当众”“被忽视”“努力没有被看到”，再邀请对方继续说。
-- 对开心或日常分享，要表现出具体的好奇和参与感，不要强行分析情绪，也不要假装自己有真实生活经历。
+回答规则：
+1. 第一句先回应最后一句里的具体事实、问题或否定。对话历史只用于理解“他、她、它、这个、刚才”等指代，不能盖过当前话题。
+2. 用户提出问题时先直接回答。用户描述麻烦时先说清当前处境或直接后果，再给至多一个可行建议；不要跳到无关的吃饭、休息或心情话题。
+3. 用户纠正你时，先简短承认判断有误并按新信息修正，不能继续坚持原来的猜测。用户明确说“不是A、只是B”时必须以B为准，不要改猜成A或其他相近情绪。
+4. 普通分享就是普通分享，不强行解释成焦虑、害怕或孤独。表达情绪时回应造成这种感受的具体事情；除非对方求建议，否则不要说教。
+5. 通常回答一到三句。问题必须紧扣用户原话，而且不是每次都必须追问；不要询问原话已经明确回答过的事情。不要编造用户没说过的人物、原因、经历或设备结果。
+6. 普通分歧优先建议清楚表达感受和边界，不把小冲突升级成争吵、威胁或断绝关系；只有用户明确描述持续伤害或危险时才讨论远离和求助。
+7. 用户没有明确结束聊天或准备睡觉时，不主动说晚安、早点休息或做个好梦。
+8. 如果用户表达立即自伤、胸痛、无法呼吸或火灾等紧急危险，清楚建议立即联系急救、警方或身边可信任的人。
 
-示例：
-用户：今天会上被领导当众批评了，我特别委屈。
-合适回应：当着大家的面被批评，难受的不只是那几句话，还有那种下不来台的感觉。最让你委屈的是他说的内容，还是他说话的方式？
-用户：中午吃了家新面馆，牛肉给得特别多。
-合适回应：牛肉给得大方，这家店已经赢一半了。汤底和面条怎么样，是你会想再去一次的那种吗？
-
-如果用户表达立即自伤、胸痛、无法呼吸、火灾等紧急危险，要清楚建议立即联系急救、警方或身边可信任的人。
-用户姓名：{user_name}
-用户偏好：{preferences}
+{profile}
 """
+
+
+GENERATION_OPTIONS = {
+    "max_new_tokens": 96,
+    "do_sample": False,
+    "repetition_penalty": 1.06,
+}
+
+
+def build_system_prompt(user_name: str, preferences: str) -> str:
+    """只在可信身份下加入真实存在的资料，避免“尚未填写”干扰模型。"""
+
+    profile: list[str] = []
+    if user_name.strip():
+        profile.append(f"用户希望被称为：{user_name.strip()}")
+    if preferences.strip():
+        profile.append(f"用户偏好：{preferences.strip()}")
+    profile_text = "\n".join(profile) or "本轮没有可用的用户私人资料。"
+    return SYSTEM_PROMPT.format(profile=profile_text)
+
+
+def clean_history(history: list[dict[str, str]]) -> list[dict[str, str]]:
+    """限制历史长度和格式，让当前原话始终拥有更高权重。"""
+
+    cleaned: list[dict[str, str]] = []
+    for message in history[-8:]:
+        role = str(message.get("role", "")).strip()
+        content = str(message.get("content", "")).strip()
+        if role not in {"user", "assistant"} or not content:
+            continue
+        cleaned.append({"role": role, "content": content[:600]})
+    return cleaned
 
 
 class LocalCompanion:
     """在本机 GPU/CPU 上运行 Hugging Face 指令模型。"""
 
-    def __init__(self, model_name: str, local_files_only: bool = True) -> None:
+    def __init__(
+        self,
+        model_name: str,
+        local_files_only: bool = True,
+        quantization: str = "none",
+    ) -> None:
         self.model_name = model_name
         self.local_files_only = local_files_only
+        self.quantization = str(quantization or "none").strip().lower()
         self._tokenizer: Any = None
         self._model: Any = None
         self._device = "cpu"
+        self._runtime_label = "cpu"
         self._load_lock = threading.Lock()
         self._generation_lock = threading.Lock()
 
     @property
     def device_label(self) -> str:
-        return self._device
+        return self._runtime_label
 
     def load(self) -> None:
         if self._model is not None:
@@ -60,10 +88,39 @@ class LocalCompanion:
                 return
 
             import torch
-            from transformers import AutoModelForCausalLM, AutoTokenizer
+            from transformers import (
+                AutoModelForCausalLM,
+                AutoTokenizer,
+                BitsAndBytesConfig,
+            )
 
             device = "cuda" if torch.cuda.is_available() else "cpu"
-            dtype = torch.float16 if device == "cuda" else torch.float32
+            model_kwargs: dict[str, Any] = {
+                "low_cpu_mem_usage": True,
+                "local_files_only": self.local_files_only,
+            }
+            quantized = device == "cuda" and self.quantization == "4bit"
+            if self.quantization not in {"none", "4bit"}:
+                raise ValueError(
+                    f"不支持的 LLM_QUANTIZATION：{self.quantization}"
+                )
+            if quantized:
+                model_kwargs.update(
+                    {
+                        "dtype": torch.float16,
+                        "device_map": "auto",
+                        "quantization_config": BitsAndBytesConfig(
+                            load_in_4bit=True,
+                            bnb_4bit_quant_type="nf4",
+                            bnb_4bit_compute_dtype=torch.float16,
+                            bnb_4bit_use_double_quant=True,
+                        ),
+                    }
+                )
+            else:
+                model_kwargs["dtype"] = (
+                    torch.float16 if device == "cuda" else torch.float32
+                )
 
             tokenizer = AutoTokenizer.from_pretrained(
                 self.model_name,
@@ -71,12 +128,20 @@ class LocalCompanion:
             )
             model = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
-                dtype=dtype,
-                low_cpu_mem_usage=True,
-                local_files_only=self.local_files_only,
-            ).to(device)
+                **model_kwargs,
+            )
+            if not quantized:
+                model = model.to(device)
             model.eval()
             self._device = device
+            model_label = str(self.model_name).replace("\\", "/").rstrip("/")
+            model_label = model_label.rsplit("/", 1)[-1]
+            if quantized:
+                self._runtime_label = f"{device} 4-bit｜{model_label}"
+            elif self.quantization == "4bit" and device == "cpu":
+                self._runtime_label = f"cpu 未量化｜{model_label}"
+            else:
+                self._runtime_label = f"{device}｜{model_label}"
             self._tokenizer = tokenizer
             self._model = model
 
@@ -94,13 +159,10 @@ class LocalCompanion:
         messages = [
             {
                 "role": "system",
-                "content": SYSTEM_PROMPT.format(
-                    user_name=user_name.strip() or "尚未填写",
-                    preferences=preferences.strip() or "尚未填写",
-                ),
+                "content": build_system_prompt(user_name, preferences),
             }
         ]
-        messages.extend(history[-12:])
+        messages.extend(clean_history(history))
         messages.append({"role": "user", "content": user_text})
 
         prompt = self._tokenizer.apply_chat_template(
@@ -115,11 +177,7 @@ class LocalCompanion:
         with self._generation_lock, torch.inference_mode():
             generated = self._model.generate(
                 **model_inputs,
-                max_new_tokens=128,
-                do_sample=True,
-                temperature=0.65,
-                top_p=0.85,
-                repetition_penalty=1.08,
+                **GENERATION_OPTIONS,
             )
 
         new_tokens = generated[:, model_inputs.input_ids.shape[1] :]

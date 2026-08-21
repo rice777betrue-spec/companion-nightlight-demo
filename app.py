@@ -235,6 +235,12 @@ def update_vad_sensitivity(value: float) -> str:
     return hands_free.status_text
 
 
+def clear_conversation_history():
+    pipeline.cancel_pending_confirmation()
+    message = hands_free.clear_history()
+    return [], "", "", message
+
+
 def save_wake_word(phrase: str) -> tuple[str, str]:
     try:
         status = pipeline.set_wake_word(phrase)
@@ -390,6 +396,8 @@ with gr.Blocks(title="陪伴小夜灯 Demo") as demo:
             "只说当前唤醒词会得到唤醒确认；也可以把唤醒词和“关灯”放在同一句。"
             "每轮回答播放结束后重新计算 "
             f"{int(settings.wake_session_seconds)} 秒空闲时间，期间聊天无需重复唤醒。\n\n"
+            "说“我要睡了”或“准备睡觉”时，小夜灯会先询问是否开启睡眠模式；"
+            "只有明确回答“要”才会把亮度调到 10%。\n\n"
             "电脑基础版使用 WebRTC VAD + 自适应能量门限，开启后先保持安静约 1 秒校准噪声。"
             "回答播放时可以说话打断；若扬声器回声造成误触发，可先戴耳机测试，"
             "设备版再接入 AEC 回声消除。"
@@ -446,7 +454,9 @@ with gr.Blocks(title="陪伴小夜灯 Demo") as demo:
                     label="偏好或背景",
                     value=DEFAULT_PREFERENCES,
                 )
-            submit = gr.Button("手动让小夜灯回应", variant="secondary")
+            with gr.Row():
+                submit = gr.Button("手动让小夜灯回应", variant="secondary")
+                clear_history_button = gr.Button("清空对话上下文")
             model_state = gr.Textbox(
                 label="模型状态",
                 value="服务启动后将自动后台预热",
@@ -587,6 +597,11 @@ with gr.Blocks(title="陪伴小夜灯 Demo") as demo:
             light_status,
             device_state,
         ],
+    )
+    clear_history_button.click(
+        fn=clear_conversation_history,
+        outputs=[history_state, transcript_box, reply_box, status],
+        queue=False,
     )
 
     audio_output.stop(

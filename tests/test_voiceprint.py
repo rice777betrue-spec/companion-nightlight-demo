@@ -140,7 +140,7 @@ class VoiceprintPrivacyTests(unittest.TestCase):
 
         self.assertIsNotNone(companion.args)
         model_input, model_history, user_name, preferences = companion.args
-        self.assertIn("视为访客", model_input)
+        self.assertEqual(model_input, "我今天心情不太好")
         self.assertEqual(model_history, [])
         self.assertEqual(user_name, "")
         self.assertEqual(preferences, "")

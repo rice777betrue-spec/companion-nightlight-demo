@@ -27,9 +27,8 @@ def main() -> None:
 
     for user_text in CASES:
         guidance = choose_dialogue_guidance(user_text)
-        model_input = f"{user_text}\n\n{guidance.instruction}"
         reply = companion.reply(
-            model_input,
+            user_text,
             [],
             "小林",
             "喜欢自然、有来有回的聊天；先听我说，不要每句话都劝我休息",

@@ -32,6 +32,7 @@ def build_pc_pipeline(config: Settings = settings) -> DemoPipeline:
         companion=LocalQwenAdapter(
             config.llm_model,
             local_files_only=config.model_offline,
+            quantization=config.llm_quantization,
         ),
         tts=LocalSpeechSynthesizerAdapter(
             config.tts_voice,
@@ -46,6 +47,7 @@ def build_pc_pipeline(config: Settings = settings) -> DemoPipeline:
             required_samples=config.voiceprint_required_samples,
         ),
         wake_word_gate=wake_word_gate,
+        sleep_confirmation_timeout_seconds=config.wake_session_seconds,
     )
 
 

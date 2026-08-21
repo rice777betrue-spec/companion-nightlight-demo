@@ -39,6 +39,7 @@ class DemoPipeline:
         speaker_verifier: SpeakerVerificationPort | None = None,
         wake_word_gate: WakeWordGatePort | None = None,
         device_runtime: DeviceRuntime | None = None,
+        sleep_confirmation_timeout_seconds: float = 30.0,
     ) -> None:
         self.asr = asr or FasterWhisperAdapter(
             settings.asr_model,
@@ -48,6 +49,7 @@ class DemoPipeline:
         self.companion = companion or LocalQwenAdapter(
             settings.llm_model,
             local_files_only=settings.model_offline,
+            quantization=settings.llm_quantization,
         )
         self.tts = tts or LocalSpeechSynthesizerAdapter(
             settings.tts_voice,
@@ -64,6 +66,9 @@ class DemoPipeline:
             self.light_driver,
             self.speaker_verifier,
             self.wake_word_gate,
+            sleep_confirmation_timeout_seconds=(
+                sleep_confirmation_timeout_seconds
+            ),
         )
         self.device_runtime = device_runtime or DeviceRuntime()
         self._warmup_status = "模型尚未预热"
@@ -118,9 +123,14 @@ class DemoPipeline:
     def set_wake_word(self, phrase: str) -> str:
         if self.wake_word_gate is None:
             raise RuntimeError("唤醒词门控未配置")
+        self.cancel_pending_confirmation()
         status = self.wake_word_gate.set_phrase(phrase)
         self._sync_asr_wake_word()
         return status
+
+    def cancel_pending_confirmation(self) -> None:
+        with self._inference_lock:
+            self.turn_engine.clear_pending_confirmation()
 
     def refresh_wake_session(self) -> str:
         if self.wake_word_gate is None:
@@ -128,6 +138,7 @@ class DemoPipeline:
         return self.wake_word_gate.refresh_session()
 
     def sleep_wake_session(self) -> str:
+        self.cancel_pending_confirmation()
         if self.wake_word_gate is None:
             return ""
         return self.wake_word_gate.sleep()
@@ -145,8 +156,10 @@ class DemoPipeline:
                 self._set_warmup_status("Whisper 已就绪，正在预热 Qwen…")
                 self.companion.load()
             elapsed = time.perf_counter() - started
+            asr_label = getattr(self.asr, "device_label", "本地")
             self._set_warmup_status(
-                f"模型已就绪｜Whisper 本地｜Qwen {self.companion.device_label}"
+                f"模型已就绪｜Whisper {asr_label}"
+                f"｜Qwen {self.companion.device_label}"
                 f"｜TTS {self.tts.engine_label}｜{self.voiceprint_status_text}"
                 f"｜预热 {elapsed:.1f} 秒"
             )

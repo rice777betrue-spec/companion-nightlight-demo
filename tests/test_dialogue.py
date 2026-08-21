@@ -9,7 +9,7 @@ class DialogueGuidanceTests(unittest.TestCase):
     def test_emotional_message_keeps_conversation_open(self) -> None:
         guidance = choose_dialogue_guidance("今天被领导批评了，我特别委屈")
         self.assertEqual(guidance.mode, "情绪陪伴")
-        self.assertIn("不是睡前告别", guidance.instruction)
+        self.assertIn("具体事情", guidance.instruction)
 
     def test_casual_message_is_not_bedtime(self) -> None:
         guidance = choose_dialogue_guidance("今天中午吃了一家很好吃的面")

@@ -281,6 +281,22 @@ class HandsFreeRuntime:
     def set_sensitivity(self, value: float) -> None:
         self.vad.set_sensitivity(value)
 
+    def clear_history(self) -> str:
+        """清除已污染的上下文，同时清空页面上的上一轮结果。"""
+
+        with self._lock:
+            self._history = []
+            self._snapshot = replace(
+                self._snapshot,
+                result_version=self._snapshot.result_version + 1,
+                transcript="",
+                reply="",
+                history=(),
+                result_status="对话上下文已清空，可以开始新的话题。",
+                last_error=None,
+            )
+        return "对话上下文已清空，可以开始新的话题。"
+
     @staticmethod
     def _encode_history(
         history: list[ChatMessage],
@@ -624,6 +640,8 @@ class HandsFreeRuntime:
             self._snapshot = replace(
                 self._snapshot,
                 result_version=self._snapshot.result_version + 1,
+                transcript="",
+                reply="",
                 result_status=f"本轮未完成：{error}",
                 status="没有听清或处理失败，继续说话可自动恢复",
                 last_error=error,
@@ -634,6 +652,8 @@ class HandsFreeRuntime:
             self._snapshot = replace(
                 self._snapshot,
                 result_version=self._snapshot.result_version + 1,
+                transcript="",
+                reply="",
                 result_status=f"本轮没有听清：{message}",
                 status="没有听清，已自动回到监听",
                 last_error=None,

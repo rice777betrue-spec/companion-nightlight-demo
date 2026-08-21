@@ -9,6 +9,23 @@ from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(PROJECT_ROOT / ".env")
+LOCAL_WHISPER_SMALL = (
+    PROJECT_ROOT / ".cache" / "models" / "faster-whisper-small"
+)
+LOCAL_QWEN_3B = PROJECT_ROOT / ".cache" / "models" / "Qwen2.5-3B-Instruct"
+WHISPER_SMALL_READY = (
+    (LOCAL_WHISPER_SMALL / "model.bin").is_file()
+    and (LOCAL_WHISPER_SMALL / "model.bin").stat().st_size == 483_546_902
+)
+DEFAULT_ASR_MODEL = (
+    str(LOCAL_WHISPER_SMALL) if WHISPER_SMALL_READY else "base"
+)
+DEFAULT_ASR_DEVICE = "cuda" if WHISPER_SMALL_READY else "cpu"
+DEFAULT_LLM_MODEL = (
+    str(LOCAL_QWEN_3B)
+    if (LOCAL_QWEN_3B / "model.safetensors.index.json").is_file()
+    else "Qwen/Qwen2.5-3B-Instruct"
+)
 
 
 def _env_flag(name: str, default: bool) -> bool:
@@ -22,11 +39,12 @@ def _env_flag(name: str, default: bool) -> bool:
 class Settings:
     project_root: Path = PROJECT_ROOT
     output_dir: Path = PROJECT_ROOT / "outputs"
-    asr_model: str = os.getenv("ASR_MODEL", "base")
-    asr_device: str = os.getenv("ASR_DEVICE", "cpu")
-    llm_model: str = os.getenv(
-        "LLM_MODEL", "Qwen/Qwen2.5-1.5B-Instruct"
-    )
+    asr_model: str = os.getenv("ASR_MODEL", DEFAULT_ASR_MODEL)
+    asr_device: str = os.getenv("ASR_DEVICE", DEFAULT_ASR_DEVICE)
+    llm_model: str = os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL)
+    llm_quantization: str = os.getenv(
+        "LLM_QUANTIZATION", "4bit"
+    ).strip().lower()
     tts_engine: str = os.getenv("TTS_ENGINE", "sapi").strip().lower()
     tts_voice: str = os.getenv("TTS_VOICE", "zh-CN-XiaoxiaoNeural")
     sapi_voice: str = os.getenv("SAPI_VOICE", "Microsoft Huihui Desktop")
