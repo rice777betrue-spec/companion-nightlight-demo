@@ -6,7 +6,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 from uuid import uuid4
 
 import edge_tts
@@ -24,7 +24,7 @@ class SpeechSynthesizer:
         voxcpm_local_files_only: bool = True,
         voxcpm_prompt_wav: str | None = None,
         voxcpm_prompt_text: str | None = None,
-        voxcpm_inference_timesteps: int = 10,
+        voxcpm_inference_timesteps: int = 6,
     ) -> None:
         self.voice = voice
         self.output_dir = output_dir
@@ -51,6 +51,10 @@ class SpeechSynthesizer:
     @property
     def engine_label(self) -> str:
         return self._active_engine
+
+    @property
+    def supports_streaming(self) -> bool:
+        return self.engine == "voxcpm"
 
     def synthesize(self, text: str) -> str:
         if self.engine == "voxcpm":
@@ -79,6 +83,27 @@ class SpeechSynthesizer:
         self._active_engine = "Edge 在线"
         return output_path
 
+    def load(self) -> None:
+        """预加载实验 TTS，避免首次回答才等待模型权重进入显存。"""
+        if self.engine == "voxcpm":
+            self._load_voxcpm()
+
+    def _load_voxcpm(self) -> Any:
+        import torch
+        from voxcpm import VoxCPM
+
+        if self._voxcpm is None:
+            if self.voxcpm_device.startswith("cuda"):
+                torch.cuda.empty_cache()
+            self._voxcpm = VoxCPM.from_pretrained(
+                self.voxcpm_model,
+                load_denoiser=False,
+                local_files_only=self.voxcpm_local_files_only,
+                optimize=False,
+                device=self.voxcpm_device,
+            )
+        return self._voxcpm
+
     def _synthesize_edge(self, text: str) -> str:
         output_path = self.output_dir / f"reply-{uuid4().hex}.mp3"
         asyncio.run(
@@ -93,24 +118,15 @@ class SpeechSynthesizer:
 
     def _synthesize_voxcpm(self, text: str) -> str:
         import soundfile as sf
-        import torch
-        from voxcpm import VoxCPM
 
-        if self._voxcpm is None:
-            if self.voxcpm_device.startswith("cuda"):
-                torch.cuda.empty_cache()
-            self._voxcpm = VoxCPM.from_pretrained(
-                self.voxcpm_model,
-                load_denoiser=False,
-                local_files_only=self.voxcpm_local_files_only,
-                optimize=False,
-                device=self.voxcpm_device,
-            )
+        model = self._load_voxcpm()
 
         generate_options: dict[str, Any] = {
             "text": text,
             "cfg_value": 2.0,
             "inference_timesteps": self.voxcpm_inference_timesteps,
+            # 默认重试会把一次回答整句重新生成多次，交互延迟不可控。
+            "retry_badcase": False,
         }
         if self.voxcpm_prompt_wav:
             if not self.voxcpm_prompt_text:
@@ -120,12 +136,47 @@ class SpeechSynthesizer:
                 prompt_text=self.voxcpm_prompt_text,
             )
 
-        wav = self._voxcpm.generate(**generate_options)
+        wav = model.generate(**generate_options)
         output_path = self.output_dir / f"reply-{uuid4().hex}.wav"
-        sf.write(output_path, wav, self._voxcpm.tts_model.sample_rate)
+        sf.write(output_path, wav, model.tts_model.sample_rate)
         if not output_path.exists() or output_path.stat().st_size == 0:
             raise RuntimeError("VoxCPM 没有生成音频文件")
         return str(output_path)
+
+    def synthesize_stream(
+        self,
+        text: str,
+        chunks_per_packet: int = 5,
+    ) -> Iterator[tuple[int, Any]]:
+        """聚合 VoxCPM 小音频块，供网页在完整语音完成前开始播放。"""
+        import numpy as np
+
+        if self.engine != "voxcpm":
+            raise RuntimeError("当前 TTS 后端不支持流式合成")
+        model = self._load_voxcpm()
+        options: dict[str, Any] = {
+            "text": text,
+            "cfg_value": 2.0,
+            "inference_timesteps": self.voxcpm_inference_timesteps,
+            "retry_badcase": False,
+        }
+        if self.voxcpm_prompt_wav:
+            if not self.voxcpm_prompt_text:
+                raise ValueError("使用 VoxCPM 克隆音色时必须配置参考音频文本")
+            options.update(
+                prompt_wav_path=self.voxcpm_prompt_wav,
+                prompt_text=self.voxcpm_prompt_text,
+            )
+
+        packet: list[Any] = []
+        for chunk in model.generate_streaming(**options):
+            packet.append(chunk)
+            if len(packet) >= chunks_per_packet:
+                yield model.tts_model.sample_rate, np.concatenate(packet)
+                packet.clear()
+        if packet:
+            yield model.tts_model.sample_rate, np.concatenate(packet)
+        self._active_engine = "VoxCPM-0.5B 本地（流式）"
 
     def _synthesize_sapi(self, text: str) -> str:
         shell = shutil.which("powershell.exe") or shutil.which("pwsh.exe")

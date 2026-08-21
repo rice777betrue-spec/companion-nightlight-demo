@@ -141,26 +141,43 @@ def run_turn(
             light_status,
             pipeline.device_runtime.status_text,
         )
-        audio_reply, tts_status = pipeline.synthesize_reply(reply)
-        final_status = (
-            f"{status.replace('｜正在生成语音…', '')}｜{tts_status}"
-        )
-        if not pipeline.device_runtime.is_current(turn_id):
-            return
-        if audio_reply is None:
-            pipeline.device_runtime.playback_finished(turn_id)
-        yield (
-            transcript,
-            reply,
-            audio_reply,
-            lamp_html(reply, brightness, next_brightness),
-            new_history,
-            final_status,
-            next_brightness,
-            next_brightness,
-            light_status,
-            pipeline.device_runtime.status_text,
-        )
+        if getattr(pipeline, "tts_supports_streaming", False):
+            for audio_packet, tts_status in pipeline.stream_reply(reply):
+                if not pipeline.device_runtime.is_current(turn_id):
+                    return
+                yield (
+                    transcript,
+                    reply,
+                    audio_packet,
+                    lamp_html(reply, brightness, next_brightness),
+                    new_history,
+                    f"{status.replace('｜正在生成语音…', '')}｜{tts_status}",
+                    next_brightness,
+                    next_brightness,
+                    light_status,
+                    pipeline.device_runtime.status_text,
+                )
+        else:
+            audio_reply, tts_status = pipeline.synthesize_reply(reply)
+            final_status = (
+                f"{status.replace('｜正在生成语音…', '')}｜{tts_status}"
+            )
+            if not pipeline.device_runtime.is_current(turn_id):
+                return
+            if audio_reply is None:
+                pipeline.device_runtime.playback_finished(turn_id)
+            yield (
+                transcript,
+                reply,
+                audio_reply,
+                lamp_html(reply, brightness, next_brightness),
+                new_history,
+                final_status,
+                next_brightness,
+                next_brightness,
+                light_status,
+                pipeline.device_runtime.status_text,
+            )
     except NoSpeechDetectedError as exc:
         if turn_id is not None and pipeline.device_runtime.is_current(turn_id):
             pipeline.device_runtime.cancel_current("没有听清，返回待机")
@@ -493,7 +510,11 @@ with gr.Blocks(title="陪伴小夜灯 Demo") as demo:
         transcript_box = gr.Textbox(label="识别结果", lines=3)
         reply_box = gr.Textbox(label="小夜灯回复", lines=3)
 
-    audio_output = gr.Audio(label="手动模式回复音频", autoplay=True)
+    audio_output = gr.Audio(
+        label="手动模式回复音频",
+        autoplay=True,
+        streaming=True,
+    )
     gr.Markdown(
         "Whisper 与 Qwen 会在启动后自动从本地缓存预热。文字回答先显示，"
         "本地中文语音生成完成后再自动播放；免按键模式直接使用电脑扬声器。"

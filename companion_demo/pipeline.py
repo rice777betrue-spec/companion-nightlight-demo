@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Iterator
+from typing import Any
 
 from companion_demo.adapters.pc import (
     FasterWhisperAdapter,
@@ -161,6 +163,10 @@ class DemoPipeline:
                 self.asr.load()
                 self._set_warmup_status("Whisper 已就绪，正在预热 Qwen…")
                 self.companion.load()
+                load_tts = getattr(self.tts, "load", None)
+                if callable(load_tts):
+                    self._set_warmup_status("Qwen 已就绪，正在预热 TTS…")
+                    load_tts()
             elapsed = time.perf_counter() - started
             asr_label = getattr(self.asr, "device_label", "本地")
             self._set_warmup_status(
@@ -228,6 +234,25 @@ class DemoPipeline:
             )
         except Exception as exc:
             return None, f"文字可用，语音合成暂不可用：{exc}"
+
+    @property
+    def tts_supports_streaming(self) -> bool:
+        return bool(getattr(self.tts, "supports_streaming", False))
+
+    def stream_reply(
+        self,
+        reply: str,
+    ) -> Iterator[tuple[tuple[int, Any], str]]:
+        """保持模型串行访问，并把可播放的语音块逐个交给网页。"""
+        started = time.perf_counter()
+        with self._tts_lock:
+            stream = getattr(self.tts, "synthesize_stream")
+            for audio_packet in stream(reply):
+                elapsed = time.perf_counter() - started
+                yield (
+                    audio_packet,
+                    f"正在流式播放｜{self.tts.engine_label} {elapsed:.2f} 秒",
+                )
 
     def run(
         self,

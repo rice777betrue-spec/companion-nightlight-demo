@@ -58,7 +58,7 @@ class Settings:
         os.getenv("VOXCPM_PROMPT_TEXT", "").strip() or None
     )
     voxcpm_inference_timesteps: int = int(
-        os.getenv("VOXCPM_INFERENCE_TIMESTEPS", "10")
+        os.getenv("VOXCPM_INFERENCE_TIMESTEPS", "6")
     )
     server_port: int = int(os.getenv("SERVER_PORT", "7860"))
     model_offline: bool = _env_flag("MODEL_OFFLINE", True)
