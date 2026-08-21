@@ -5,7 +5,9 @@ import base64
 import os
 import shutil
 import subprocess
+from importlib import import_module
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Iterator
 from uuid import uuid4
 
@@ -104,6 +106,27 @@ class SpeechSynthesizer:
             )
         return self._voxcpm
 
+    @staticmethod
+    def _enable_soundfile_prompt_loader() -> None:
+        """绕过 Windows TorchCodec/FFmpeg DLL，直接读取普通 WAV 参考音频。"""
+        import soundfile as sf
+        import torch
+        import torchaudio
+
+        def load_wav(path: str) -> tuple[Any, int]:
+            samples, sample_rate = sf.read(
+                path,
+                dtype="float32",
+                always_2d=True,
+            )
+            return torch.from_numpy(samples.T.copy()), sample_rate
+
+        legacy_model = import_module("voxcpm.model.voxcpm")
+        legacy_model.torchaudio = SimpleNamespace(
+            load=load_wav,
+            functional=torchaudio.functional,
+        )
+
     def _synthesize_edge(self, text: str) -> str:
         output_path = self.output_dir / f"reply-{uuid4().hex}.mp3"
         asyncio.run(
@@ -120,6 +143,8 @@ class SpeechSynthesizer:
         import soundfile as sf
 
         model = self._load_voxcpm()
+        if self.voxcpm_prompt_wav:
+            self._enable_soundfile_prompt_loader()
 
         generate_options: dict[str, Any] = {
             "text": text,
@@ -154,6 +179,8 @@ class SpeechSynthesizer:
         if self.engine != "voxcpm":
             raise RuntimeError("当前 TTS 后端不支持流式合成")
         model = self._load_voxcpm()
+        if self.voxcpm_prompt_wav:
+            self._enable_soundfile_prompt_loader()
         options: dict[str, Any] = {
             "text": text,
             "cfg_value": 2.0,
